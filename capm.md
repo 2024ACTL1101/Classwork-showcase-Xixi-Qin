@@ -81,7 +81,10 @@ $$
 $$
 
 ```r
-#fill the code
+# Calculate daily returns and add to the dataframe
+df <- df %>%
+  mutate(AMD_daily_return = (AMD - lag(AMD)) / lag(AMD),
+         SP500_daily_return = (GSPC - lag(GSPC)) / lag(GSPC))
 ```
 
 - **Calculate Risk-Free Rate**: Calculate the daily risk-free rate by conversion of annual risk-free Rate. This conversion accounts for the compounding effect over the days of the year and is calculated using the formula:
@@ -91,21 +94,32 @@ $$
 $$
 
 ```r
-#fill the code
+# Calculate the daily risk-free rate and add to the dataframe
+df <- df %>%
+  mutate(daily_RF = (1 + RF / 100) ^ (1 / 360) - 1)
 ```
 
 
 - **Calculate Excess Returns**: Compute the excess returns for AMD and the S&P 500 by subtracting the daily risk-free rate from their respective returns.
 
 ```r
-#fill the code
+# Calculate excess returns and add to the dataframe
+df <- df %>%
+  mutate(AMD_excess = AMD_daily_return - daily_RF,
+         SP500_excess = SP500_daily_return - daily_RF)
 ```
 
 
 - **Perform Regression Analysis**: Using linear regression, we estimate the beta (\(\beta\)) of AMD relative to the S&P 500. Here, the dependent variable is the excess return of AMD, and the independent variable is the excess return of the S&P 500. Beta measures the sensitivity of the stock's returns to fluctuations in the market.
 
 ```r
-#fill the code
+# Remove any rows with na values
+df <- df %>%
+  na.omit()
+
+# Perform linear regression
+CAPM_model <- lm(AMD_excess ~ SP500_excess, data = df)
+summary(CAPM_model)
 ```
 
 
@@ -115,12 +129,20 @@ What is your \(\beta\)? Is AMD more volatile or less volatile than the market?
 
 **Answer:**
 
+The \(\beta\) value is indicated in the summary of the CAPM_model above as the value 1.5699987, which is displayed as the estimate of SP500_excess. This means that for a one unit increase in the excess return for the S&P 500 will result in an approximate 1.57 unit increase in excess return for the AMD. Since \(\beta\) > 1, that means that AMD is sharing a bigger proportion of the market risk, so it is more volatile than the market. This greater risk generates potential for higher returns due to the greater fluctuations of the AMD share price, however, this consequently results in greater potential losses. This higher volatility in AMD shares would incentive more 'risk lover' investors, while 'risk adverse' investors would be more inclined to invest in other shares within the market.
 
 #### Plotting the CAPM Line
 Plot the scatter plot of AMD vs. S&P 500 excess returns and add the CAPM regression line.
 
 ```r
-#fill the code
+# Plot the data points and CAPM line
+ggplot(df,aes(x = SP500_excess, y = AMD_excess)) +
+  geom_point() +
+  geom_smooth(method = "lm", col = "red", se = TRUE) +
+  theme(text = element_text(family = "Palatino")) +
+  labs(title = "AMD vs S&P 500",
+       x = "S&P 500 excess return",
+       y = "AMD excess return")
 ```
 
 ### Step 3: Predictions Interval
@@ -131,5 +153,26 @@ Suppose the current risk-free rate is 5.0%, and the annual expected return for t
 **Answer:**
 
 ```r
-#fill the code
+# Define values
+Rf <- 0.05
+annual_E_Rm <- 0.133
+beta_i <- coef(CAPM_model)[2]
+
+# Calculate the forecast AMD return from the CAPM Formula
+AMD_E_Ri <- Rf + beta_i * (annual_E_Rm - Rf)
+
+# Extract and calculate the standard error from the regression model
+s_f <- summary(CAPM_model)$sigma
+annual_s_f <- s_f * sqrt(252)
+
+# Determine the quantile of the critical value
+quantile <- 1 - (1 - 0.90) / 2 # The t test is two sided
+
+# Find the t-score(critical value)
+t_score <- qt( quantile, df = nrow(df) - 1 )
+
+# Calculate the prediction interval
+lower_bound <- AMD_E_Ri - t_score * annual_s_f
+upper_bound <- AMD_E_Ri + t_score * annual_s_f
+cat("Prediction interval:", lower_bound, "~", upper_bound)
 ```
