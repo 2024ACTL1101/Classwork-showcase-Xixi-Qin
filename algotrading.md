@@ -62,16 +62,37 @@ Implement the trading algorithm as per the instructions. You should initialize n
 ```r
 # Initialize columns for trade type, cost/proceeds, and accumulated shares in amd_df
 amd_df$trade_type <- NA
-amd_df$costs_proceeds <- NA  # Corrected column name
-amd_df$accumulated_shares <- 0  # Initialize if needed for tracking
+amd_df$costs_proceeds <- NA # Corrected column name
+amd_df$accumulated_shares <- 0 # Initialize if needed for tracking
 
 # Initialize variables for trading logic
 previous_price <- 0
 share_size <- 100
 accumulated_shares <- 0
 
+# Algorithm loop
 for (i in 1:nrow(amd_df)) {
-# Fill your code here
+  # Buy shares if it is the first day(initialized previous price = 0)
+  # Buy shares if the current price is lower than the previous price
+  if (previous_price == 0 | amd_df$close[i] < previous_price) {
+    amd_df$trade_type[i] <- "buy"
+    # Multiply the share price by the negative of the share size
+      # The negative indicates it is an expenditure
+    amd_df$costs_proceeds[i] <- amd_df$close[i] * -share_size
+    # Update both the accumulated shares variable and column
+    amd_df$accumulated_shares[i] <- accumulated_shares + share_size
+    accumulated_shares <- accumulated_shares + share_size
+    # Restrict the "previous_price == 0" condition to only work once(i.e. for i=1)
+    previous_price <- amd_df$close[i] # The share price will never be 0
+  } else {
+    # Update the accumulated shares column and previous price for all other cases
+    amd_df$accumulated_shares[i] <- accumulated_shares
+    previous_price <- amd_df$close[i]
+  }
+  # Sell all shares on the last day
+  amd_df$trade_type[nrow(amd_df)] <- "sell"
+  amd_df$costs_proceeds[nrow(amd_df)] <- accumulated_shares * amd_df$close[nrow(amd_df)]
+  amd_df$accumulated_shares[nrow(amd_df)] <- 0
 }
 ```
 
@@ -79,7 +100,12 @@ for (i in 1:nrow(amd_df)) {
 ### Step 3: Customize Trading Period
 - Define a trading period you wanted in the past five years 
 ```r
-# Fill your code here
+# Define the end points of a trading period within 2021
+trade_start_date <- as.Date("2021-01-01")
+trade_end_date <- as.Date("2021-12-31")
+
+# Filter the dataframe to only include rows within the custom trading period
+amd_df <- amd_df[amd_df$date >= trade_start_date & amd_df$date <= trade_end_date ,]
 ```
 
 
@@ -91,7 +117,64 @@ After running your algorithm, check if the trades were executed as expected. Cal
 - ROI Formula: $$\text{ROI} = \left( \frac{\text{Total Profit or Loss}}{\text{Total Capital Invested}} \right) \times 100$$
 
 ```r
-# Fill your code here
+## First run the Algorithm in Step 2
+# Initialize columns for trade type, cost/proceeds, and accumulated shares in amd_df
+amd_df$trade_type <- NA
+amd_df$costs_proceeds <- NA # Corrected column name
+amd_df$accumulated_shares <- 0 # Initialize if needed for tracking
+
+# Initialize variables for trading logic
+previous_price <- 0
+share_size <- 100
+accumulated_shares <- 0
+
+# Algorithm loop
+for (i in 1:nrow(amd_df)) {
+  # Buy shares if it is the first day(initialized previous price = 0)
+  # Buy shares if the current price is lower than the previous price
+  if (previous_price == 0 | amd_df$close[i] < previous_price) {
+    amd_df$trade_type[i] <- "buy"
+    # Multiply the share price by the negative of the share size
+      # The negative indicates it is an expenditure
+    amd_df$costs_proceeds[i] <- amd_df$close[i] * -share_size
+    # Update both the accumulated shares variable and column
+    amd_df$accumulated_shares[i] <- accumulated_shares + share_size
+    accumulated_shares <- accumulated_shares + share_size
+    # Restrict the "previous_price == 0" condition to only work once(i.e. for i=1)
+    previous_price <- amd_df$close[i] # The share price will never be 0
+  } else {
+    # Update the accumulated shares column and previous price for all other cases
+    amd_df$accumulated_shares[i] <- accumulated_shares
+    previous_price <- amd_df$close[i]
+  }
+  # Sell all shares on the last day
+  amd_df$trade_type[nrow(amd_df)] <- "sell"
+  amd_df$costs_proceeds[nrow(amd_df)] <- accumulated_shares * amd_df$close[nrow(amd_df)]
+  amd_df$accumulated_shares[nrow(amd_df)] <- 0
+}
+
+# Calculate total profit/loss within the period
+total_profit_or_loss <- sum(amd_df$costs_proceeds, na.rm=TRUE)
+
+# Initialize the invested capital to 0
+invested_capital <- 0
+for (i in 1:nrow(amd_df)) {
+  # Filter out rows where the trade type is NA
+  if (is.na(amd_df$trade_type[i]) == FALSE) {
+    # Invested capital is the negative sum of all ‘buy’ transactions
+    if (amd_df$trade_type[i] == "buy") {
+      invested_capital <- invested_capital - amd_df$costs_proceeds[i]
+    }
+  }
+}
+# Use the Return on Investment(ROI) formula
+ROI <- total_profit_or_loss / invested_capital * 100
+
+# Create a function that prints the two calcaulted values
+step_4_solution <- function(total_profit_or_loss, ROI){cat("Total profit/loss =", total_profit_or_loss, ": ROI =", ROI)}
+
+# Print out a solution stating both values
+step_4_solution(total_profit_or_loss, ROI)
 ```
 
 ### Step 5: Profit-Taking Strategy or Stop-Loss Mechanisum (Choose 1)
@@ -100,7 +183,102 @@ After running your algorithm, check if the trades were executed as expected. Cal
 
 
 ```r
-# Fill your code here
+# The custom trading period has already been filtered in Step 3
+
+# Initialize columns for trade type, cost/proceeds, and accumulated shares in amd_df
+amd_df$trade_type <- NA
+amd_df$costs_proceeds <- NA
+amd_df$accumulated_shares <- 0
+
+# Initialize variables for trading logic
+previous_price <- 0
+share_size <- 100
+accumulated_shares <- 0
+# Create new variables for the average purchase price and percentage threshold to sell
+number_of_buys <- 0 # Records the number of previous purchases to help find the average
+                    # purchase price
+average_purchase_price <- 0 # Stores the average purchase price for all previous dates
+                            # within the dataframe
+threshold_to_sell <- 0.90 # 90% percentage threshold before shares are sold(falls by 10%)
+
+# Algorithm loop
+for (i in 1:nrow(amd_df)) {
+  # Buy shares if it is the first day(initialized previous price = 0)
+  # Buy shares if the current price is lower than the previous price
+  if (previous_price == 0) {
+    amd_df$trade_type[i] <- "buy"
+    # Multiply the share price by the negative of the share size
+      # The negative indicates it is an expenditure
+    amd_df$costs_proceeds[i] <- amd_df$close[i] * -share_size
+    # Find the new average purchase price that includes row i's value
+    average_purchase_price <- (average_purchase_price * number_of_buys
+                              + amd_df$close[i]) / (number_of_buys + 1)
+    # Update the number of purchases
+    number_of_buys <- number_of_buys + 1
+    # Update both the accumulated shares variable and column
+    amd_df$accumulated_shares[i] <- accumulated_shares + share_size
+    accumulated_shares <- accumulated_shares + share_size
+    # Restrict the "previous_price == 0" condition to only work once(i.e. for i=1)
+    previous_price <- amd_df$close[i] # The share price will never be 0
+    # Sell half of the holdings if the price is less than 90% of the current average
+    # purchase price
+  } else if (amd_df$close[i] <= average_purchase_price * threshold_to_sell){
+    amd_df$trade_type[i] <- "sell"
+    # The floor() command rounds down to ensure shares are always sold as whole numbers
+    amd_df$costs_proceeds[i] <- amd_df$close[i] * floor(accumulated_shares / 2)
+    # The ceiling() command rounds up which ensures that the sum of shares sold and
+    # retained is equal to the original number of accumulated shares
+    amd_df$accumulated_shares[i] <- ceiling(accumulated_shares / 2)
+    accumulated_shares <- ceiling(accumulated_shares / 2)
+    previous_price <- amd_df$close[i]
+    # Buy shares if the price is higher than 90% of the average purchase price but still
+    # lower than that of the previous day
+  } else if(amd_df$close[i] < previous_price) {
+    amd_df$trade_type[i] <- "buy"
+    # Multiply the share price by the negative of the share size
+      # The negative indicates it is an expenditure
+    amd_df$costs_proceeds[i] <- amd_df$close[i] * -share_size
+    # Find the new average purchase price that includes row i's value
+    average_purchase_price <- (average_purchase_price * number_of_buys
+                                + amd_df$close[i]) / (number_of_buys + 1)
+    # Update the number of purchases
+    number_of_buys <- number_of_buys + 1
+    # Update both the accumulated shares variable and column
+    amd_df$accumulated_shares[i] <- accumulated_shares + share_size
+    accumulated_shares <- accumulated_shares + share_size
+    previous_price <- amd_df$close[i]
+  } else {
+    amd_df$accumulated_shares[i] <- accumulated_shares
+    previous_price <- amd_df$close[i]
+  }
+  # Sell all shares on the last day
+  amd_df$trade_type[nrow(amd_df)] <- "sell"
+  amd_df$costs_proceeds[nrow(amd_df)] <- accumulated_shares * amd_df$close[nrow(amd_df)]
+  amd_df$accumulated_shares[nrow(amd_df)] <- 0
+}
+
+# Calculate total profit/loss within the period for the new algorithm
+new_total_profit_or_loss <- sum(amd_df$costs_proceeds, na.rm=TRUE)
+
+# Initialize the new invested capital to 0
+new_invested_capital <- 0
+for (i in 1:nrow(amd_df)) {
+  # Filter out rows where the trade type is NA
+  if (is.na(amd_df$trade_type[i]) == FALSE) {
+    # Invested capital is the negative sum of all ‘buy’ transactions
+    if (amd_df$trade_type[i] == "buy") {
+      new_invested_capital <- new_invested_capital - amd_df$costs_proceeds[i]
+    }
+  }
+}
+# Use the Return on Investment(ROI) formula
+new_ROI <- new_total_profit_or_loss / new_invested_capital * 100
+
+# Create a function that prints the two calcaulted values
+step_5_solution <- function(new_total_profit_or_loss, new_ROI)
+                    {cat("New total profit/loss =", new_total_profit_or_loss,
+                          ": New ROI =", new_ROI)}
+step_5_solution(new_total_profit_or_loss, new_ROI)
 ```
 
 
@@ -110,11 +288,24 @@ After running your algorithm, check if the trades were executed as expected. Cal
 
 
 ```r
-# Fill your code here and Disucss
+# Use the two prior functions to print the original and new total P/L and ROI
+step_4_solution(total_profit_or_loss, ROI)
+step_5_solution(new_total_profit_or_loss, new_ROI)
 ```
 
-Sample Discussion: On Wednesday, December 6, 2023, AMD CEO Lisa Su discussed a new graphics processor designed for AI servers, with Microsoft and Meta as committed users. The rise in AMD shares on the following Thursday suggests that investors believe in the chipmaker's upward potential and market expectations; My first strategy earned X dollars more than second strategy on this day, therefore providing a better ROI.
+Discussion: Both the profit/loss and ROI worsened in my chosen period. The total profit/loss decreased by 2.6 times from 553148.9 to 211621.3. The ROI faced a similar effect, where it was decreased by 2.4 times from 44.4082 to 18.84097. These results indicate that my second strategy was not as efficient as the first one. This can be explained through considering the relevant market events which effected share prices within my chosen period of 2021.
 
+On Tuesday, October 27, 2020, AMD announced that they have entered into a definitive agreement to acquire Xilinx in an all-stock transaction valued at $35 billion. Xilinx was an American technology and semiconductor company, acting as a specialist producer of FPGAs (field-programmable gate arrays), which are particularly useful for telecommunications applications, a sector elevated by the development of 5G across the world.
+
+AMD CEO Dr. Lisa Su commented, “Our acquisition of Xilinx marks the next leg in our journey to establish AMD as the industry’s high performance computing leader and partner of choice for the largest and most important technology companies in the world”.
+
+Post-closing, current AMD stockholders will own approximately 74% of the combined company on a fully diluted basis. This annoucemented undoubtable increased overall investor confidence, as evident by the rapid increase in share price throughout the 2021 period. This resulted in the price of the shares being significantly higher at the end of the 2021 period when compared to their initial prices.
+
+The second strategy implements a “stop-loss mechanism” strategy, which aims to sell shares after a significant decrease in share price(10% for my strategy) in order to reduce the overall loss of profit, assuming that the price will continue to fall. This strategy is not suitable for the 2021 time period as the price only falls for a short period of time, while overall, the share price is increasing. This means that more profit would be generated by selling at the end of the period, as opposed to when the stock price has just fallen.
+
+This is demonstrated by the Return on Investment of the second strategy being less than two times smaller than that of the first. This is because, while the first invested capital was only 11% more than that for the second strategy, the first total profit is around 2.6 times that of the second total profit. This large difference greatly skews the new ratio between the two values, which is represented by the ROI.
+
+For my custom time period, it is evident that the first strategy would be more suitable and effective, providing a better ROI and total profit.
 
 
 
